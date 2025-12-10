@@ -3,11 +3,13 @@ import './style.css'
 import * as THREE from 'three'
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 
+// Setup
 const scene = new THREE.Scene();
-
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-
 const renderer = new THREE.WebGLRenderer({
   canvas: document.querySelector('#bg')
 })
@@ -28,6 +30,8 @@ const gridHelper = new THREE.GridHelper(200, 50)
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
+const matrix = new THREE.Matrix3();
+
 function addStar() {
   const geometry = new THREE.SphereGeometry(0.25, 24, 24);
   const material = new THREE.MeshBasicMaterial({color:0xffffff, wireframe: true});
@@ -41,10 +45,40 @@ function addStar() {
 
 Array(200).fill().forEach(addStar)
 
+function addBasis() {
+  const basis = {
+    x: new THREE.Vector3(),
+    y: new THREE.Vector3(),
+    z: new THREE.Vector3()
+  }
+  matrix.extractBasis(basis.x, basis.y, basis.z);
+
+  matLine = new LineMaterial( {
+
+    color: 0xffffff,
+    linewidth: 5, // in world units with size attenuation, pixels otherwise
+    vertexColors: true,
+
+    dashed: false,
+    alphaToCoverage: true,
+
+  });
+
+  const counter = 0;
+  for (const b in basis) {
+    const geometry = new LineGeometry();
+    geometry.setPositions([new THREE.Vector3, b])
+    geometry.setColors([])
+    counter++;
+  }
+
+}
+
 
 
 scene.add(torus)
 scene.add(gridHelper)
+
 
 function animate() {
   requestAnimationFrame(animate);
