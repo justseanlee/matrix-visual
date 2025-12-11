@@ -6,13 +6,15 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import textureURL from './textures/arrow.png'
+
 // Setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({
-  canvas: document.querySelector('#bg')
+  canvas: document.querySelector('#bg'),
+  antialias: true
 })
+renderer.getContext().enable(renderer.getContext().SAMPLE_ALPHA_TO_COVERAGE);
 
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -33,7 +35,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 const matrix = new THREE.Matrix3();
 
 const vectors = [];
-
+let testarr;
 
 function addStar() {
   const geometry = new THREE.SphereGeometry(0.25, 24, 24);
@@ -56,6 +58,9 @@ addVector(new THREE.Vector3(x, y, z));
 scene.add(torus)
 scene.add(gridHelper)
 
+const origin = new THREE.Vector3(0, 0, 0);
+const originScreen = new THREE.Vector3();
+const arrowScreen = new THREE.Vector3();
 
 function animate() {
   requestAnimationFrame(animate);
@@ -67,6 +72,13 @@ function animate() {
   controls.update();
 
   renderer.render(scene,camera);
+
+  originScreen.copy(origin).project(camera);
+  arrowScreen.copy(testarr.position).project(camera);
+
+  const angle = Math.atan2(arrowScreen.y - originScreen.y, arrowScreen.x - originScreen.x);
+
+  testarr.material.rotation = angle - Math.PI/2;
   
 }
 
@@ -101,13 +113,14 @@ function addVector(v, color = new THREE.Color(0xffffff)) {
   console.log(color.r)
   const lineMat = new LineMaterial( {
     color: 0xffffff,
-    linewidth: 5, // in world units with size attenuation, pixels otherwise
+    linewidth: 3, // in world units with size attenuation, pixels otherwise
     vertexColors: true,
-
+    
     dashed: false,
     alphaToCoverage: true,
   });
-
+  lineMat.cap = 'round';
+  lineMat.resolution.set(window.innerWidth, window.innerHeight);
   
   const line = new Line2(geometry, lineMat);
   line.computeLineDistances();
@@ -115,28 +128,25 @@ function addVector(v, color = new THREE.Color(0xffffff)) {
   scene.add(line)
   vectors.push(line)
 
-  const map = new THREE.TextureLoader().load(textureURL, () => {
+  const map = new THREE.TextureLoader().load('arrow.png', () => {
     console.log("Texture loaded!");
   });
-  map.colorSpace = THREE.SRGBColorSpace;
+
   map.needsUpdate = true;
 
   const arrowMat = new THREE.SpriteMaterial({
     map: map,
-    transparent: true
+    transparent: true,
+    sizeAttenuation: false,
+    color: color
   });
   const arrow = new THREE.Sprite( arrowMat );
-  arrow.scale.set(200, 200, 1)
-  scene.add(arrow)
+  arrow.scale.set(0.04, 0.04, 1)
+  arrow.center.set(0.5, 0.8);
 
-  
-  const test = new THREE.Mesh(
-    new THREE.BoxGeometry(3,3,3),
-    new THREE.MeshBasicMaterial( { map: map} )
-  );
-
-  scene.add(test)
-
+  arrow.position.set(v.x, v.y, v.z);
+  testarr = arrow;
+  scene.add(arrow);
 }
 
 window.addEventListener('resize', () => {
