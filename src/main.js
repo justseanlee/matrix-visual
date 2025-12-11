@@ -53,7 +53,7 @@ Array(200).fill().forEach(addStar)
 
 
 const [x, y, z] = Array(3).fill().map(() => THREE.MathUtils.randFloatSpread(100));
-addVector(new THREE.Vector3(x, y, z));
+addVector(new THREE.Vector3(x, y, z), new THREE.Color(0x00ff00));
 
 scene.add(torus)
 scene.add(gridHelper)
@@ -108,7 +108,7 @@ function addVector(v, color = new THREE.Color(0xffffff)) {
 
   const geometry = new LineGeometry();
   geometry.setPositions([0, 0, 0, v.x, v.y, v.z]);
-  geometry.setColors([1, 0, 0, color.r, color.b, color.g]);
+  geometry.setColors([1, 0, 0, color.r, color.g, color.b]);
 
   console.log(color.r)
   const lineMat = new LineMaterial( {
