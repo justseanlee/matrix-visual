@@ -20,13 +20,9 @@ renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 camera.position.setZ(30);
 
+const origin = new THREE.Vector3(0, 0, 0);
 
 renderer.render(scene, camera);
-
-const geometry = new THREE.TorusGeometry(10, 3, 16, 100);
-const material = new THREE.MeshBasicMaterial({color: 0xFF6347, wireframe: true});
-const torus = new THREE.Mesh(geometry, material)
-
 
 const gridHelper = new THREE.GridHelper(200, 50)
 
@@ -35,6 +31,96 @@ const controls = new OrbitControls(camera, renderer.domElement);
 const matrix = new THREE.Matrix3();
 
 const vectors = [];
+
+
+class vectorObject {
+  line;
+  arrow;
+  pos = new THREE.Vector3(0, 0, 0);
+  org = new THREE.Vector3(0, 0, 0);
+  constructor(x, y, z, col1 = new THREE.Color(0xffffff), col2 = col1) {
+    this.col1 = col1
+    this.col2 = col2
+
+    this.pos = new THREE.Vector3(x, y, z)
+
+    const geometry = new LineGeometry();
+    geometry.setPositions([0, 0, 0, x, y, z]);
+    geometry.setColors([col1.r, col1.g, col1.b, col2.r, col2.g, col2.b]);
+
+    const lineMat = new LineMaterial({
+      color: 0xffffff,
+      linewidth: 3, // in world units with size attenuation, pixels otherwise
+      vertexColors: true,
+
+      dashed: false,
+      alphaToCoverage: true,
+    });
+    lineMat.cap = 'round';
+    lineMat.resolution.set(window.innerWidth, window.innerHeight);
+
+    const line = new Line2(geometry, lineMat);
+    line.computeLineDistances();
+
+    this.line = line;
+    scene.add(this.line)
+
+    const map = new THREE.TextureLoader().load('arrow.png', () => {
+      console.log("Texture loaded!");
+    });
+
+
+    const arrowMat = new THREE.SpriteMaterial({
+      map: map,
+      transparent: true,
+      sizeAttenuation: false,
+      color: col2
+    });
+    const arrow = new THREE.Sprite(arrowMat);
+    arrow.scale.set(0.04, 0.04, 1)
+    arrow.center.set(0.5, 0.8);
+
+    arrow.position.set(x, y, z);
+    this.arrow = arrow;
+    scene.add(this.arrow)
+
+    vectors.push(this)
+  }
+
+
+  update() {
+    this.line.geometry.setPositions([0, 0, 0, this.pos.x, this.pos.y, this.pos.z])
+    this.arrow.position.set(this.pos.x, this.pos.y, this.pos.z)
+
+
+    const originScreen = new THREE.Vector3();
+    const arrowScreen = new THREE.Vector3();
+
+    originScreen.copy(origin).project(camera);
+    arrowScreen.copy(this.pos).project(camera);
+
+    const angle = Math.atan2(arrowScreen.y - originScreen.y, arrowScreen.x - originScreen.x);
+    this.arrow.material.rotation = angle - Math.PI / 2;
+  }
+}
+
+
+
+
+
+
+
+const geometry = new THREE.TorusGeometry(10, 3, 16, 100);
+const material = new THREE.MeshBasicMaterial({color: 0xFF6347, wireframe: true});
+const torus = new THREE.Mesh(geometry, material)
+
+const basis = {
+    x: new vectorObject(1, 0, 0, new THREE.Color(0xf2777a)),
+    y: new vectorObject(0, 1, 0, new THREE.Color(0x91d191)),
+    z: new vectorObject(0, 0, 1, new THREE.Color(0x6ab0f3))
+}
+
+
 let testarr;
 
 function addStar() {
@@ -52,15 +138,13 @@ Array(200).fill().forEach(addStar)
 
 
 
-const [x, y, z] = Array(3).fill().map(() => THREE.MathUtils.randFloatSpread(100));
-addVector(new THREE.Vector3(x, y, z), new THREE.Color(0x00ff00));
+const test = new vectorObject(20, 20, 20)
 
 scene.add(torus)
 scene.add(gridHelper)
 
-const origin = new THREE.Vector3(0, 0, 0);
-const originScreen = new THREE.Vector3();
-const arrowScreen = new THREE.Vector3();
+
+
 
 function animate() {
   requestAnimationFrame(animate);
@@ -73,12 +157,13 @@ function animate() {
 
   renderer.render(scene,camera);
 
-  originScreen.copy(origin).project(camera);
-  arrowScreen.copy(testarr.position).project(camera);
+  test.pos.x += 0.01;
+  test.pos.y += 0.01;
+  test.pos.z += 0.01;
 
-  const angle = Math.atan2(arrowScreen.y - originScreen.y, arrowScreen.x - originScreen.x);
-
-  testarr.material.rotation = angle - Math.PI/2;
+  for (const vector of vectors) {
+    vector.update()
+  }
   
 }
 
@@ -125,14 +210,12 @@ function addVector(v, color = new THREE.Color(0xffffff)) {
   const line = new Line2(geometry, lineMat);
   line.computeLineDistances();
 
-  scene.add(line)
-  vectors.push(line)
+
 
   const map = new THREE.TextureLoader().load('arrow.png', () => {
     console.log("Texture loaded!");
   });
 
-  map.needsUpdate = true;
 
   const arrowMat = new THREE.SpriteMaterial({
     map: map,
@@ -146,8 +229,23 @@ function addVector(v, color = new THREE.Color(0xffffff)) {
 
   arrow.position.set(v.x, v.y, v.z);
   testarr = arrow;
-  scene.add(arrow);
+
+  const group = new THREE.Group();
+  group.add(arrow);
+  group.add(line);
+  scene.add(group);
+
+  const sphere = new THREE.BoxGeometry(1, 1, 1)
+  const material = new THREE.MeshBasicMaterial({color:0xffffff, wireframe: true});
+  const pos = new THREE.Mesh(sphere, material);
+  pos.position.set(group.position.x, group.position.y, group.position.z)
+  console.log(line.position)
+  console.log(pos.position)
+  scene.add(pos) 
 }
+
+
+
 
 window.addEventListener('resize', () => {
   const width = window.innerWidth;
