@@ -1,6 +1,7 @@
 import './style.css'
 
 import * as THREE from 'three'
+import { sqrtm } from 'mathjs'
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -264,12 +265,12 @@ function addBasis() {
   }
   matrix.extractBasis(basis.x, basis.y, basis.z);
 
-  const counter = 0;
+  const c = 0;
   for (const b in basis) {
     const geometry = new LineGeometry();
     geometry.setPositions([new THREE.Vector3, b])
     geometry.setColors([])
-    counter++;
+    c++;
   }
 }
 
