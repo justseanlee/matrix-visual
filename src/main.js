@@ -19,6 +19,10 @@ renderer.getContext().enable(renderer.getContext().SAMPLE_ALPHA_TO_COVERAGE);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 camera.position.setZ(30);
+camera.near = 0.01;
+camera.far = 1000;
+camera.updateProjectionMatrix();
+
 
 const origin = new THREE.Vector3(0, 0, 0);
 
@@ -28,21 +32,69 @@ const gridHelper = new THREE.GridHelper(200, 50)
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
-const matrix = new THREE.Matrix3();
+const matrix = new THREE.Matrix3().set(
+  THREE.MathUtils.randFloatSpread(2),
+  THREE.MathUtils.randFloatSpread(2),
+  THREE.MathUtils.randFloatSpread(2),
+
+  THREE.MathUtils.randFloatSpread(2),
+  THREE.MathUtils.randFloatSpread(2),
+  THREE.MathUtils.randFloatSpread(2),
+
+  THREE.MathUtils.randFloatSpread(2),
+  THREE.MathUtils.randFloatSpread(2),
+  THREE.MathUtils.randFloatSpread(2)
+);
+
 
 const vectors = [];
 
+const root = new THREE.Group();
+scene.add(root);
+
+
+class ScreenDebugPoints {
+  constructor(container = document.body) {
+    this.container = container;
+    this.dots = [];
+  }
+
+  add(color = 'red') {
+    const el = document.createElement('div');
+    el.className = 'debug-dot';
+    el.style.background = color;
+    this.container.appendChild(el);
+    this.dots.push(el);
+    return el;
+  }
+
+  update(dot, worldPos, camera, renderer) {
+    const v = worldPos.clone().project(camera);
+
+    const w = renderer.domElement.clientWidth;
+    const h = renderer.domElement.clientHeight;
+
+    dot.style.left = `${(v.x * 0.5 + 0.5) * w}px`;
+    dot.style.top  = `${(-v.y * 0.5 + 0.5) * h}px`;
+    dot.style.opacity = (v.z < -1 || v.z > 1) ? 0.2 : 1;
+  }
+}
 
 class vectorObject {
   line;
   arrow;
+  pre = new THREE.Vector3(0, 0, 0);
   pos = new THREE.Vector3(0, 0, 0);
   org = new THREE.Vector3(0, 0, 0);
+  debug = new ScreenDebugPoints(overlay)
+  dot = this.debug.add()
+  orgdot = this.debug.add('blue')
   constructor(x, y, z, col1 = new THREE.Color(0xffffff), col2 = col1) {
     this.col1 = col1
     this.col2 = col2
 
-    this.pos = new THREE.Vector3(x, y, z)
+    this.pre = new THREE.Vector3(x, y, z)
+    this.pos = this.pre
 
     const geometry = new LineGeometry();
     geometry.setPositions([0, 0, 0, x, y, z]);
@@ -54,12 +106,14 @@ class vectorObject {
       vertexColors: true,
 
       dashed: false,
-      alphaToCoverage: true,
+      alphaToCoverage: false,
+      depthTest: false,
     });
     lineMat.cap = 'round';
     lineMat.resolution.set(window.innerWidth, window.innerHeight);
 
     const line = new Line2(geometry, lineMat);
+    line.frustumCulled = false;
     line.computeLineDistances();
 
     this.line = line;
@@ -85,24 +139,47 @@ class vectorObject {
     scene.add(this.arrow)
 
     vectors.push(this)
+
+    
   }
 
-
+  
   update() {
+
+    const w = renderer.domElement.clientWidth;
+    const h = renderer.domElement.clientHeight;
+
+    this.pos = this.pre.clone().applyMatrix3(matrix)
+
     this.line.geometry.setPositions([0, 0, 0, this.pos.x, this.pos.y, this.pos.z])
     this.arrow.position.set(this.pos.x, this.pos.y, this.pos.z)
 
 
+    this.line.material.resolution.set(w, h);
+
+    const originWorld = new THREE.Vector3
+    const arrowWorld = new THREE.Vector3();
     const originScreen = new THREE.Vector3();
     const arrowScreen = new THREE.Vector3();
 
-    originScreen.copy(origin).project(camera);
-    arrowScreen.copy(this.pos).project(camera);
+    //originWorld.copy(origin)
+    //arrowWorld.copy(this.pos)
+    // IMPORTANT PART
+    this.line.getWorldPosition(originWorld);
+    this.arrow.getWorldPosition(arrowWorld);
 
-    const angle = Math.atan2(arrowScreen.y - originScreen.y, arrowScreen.x - originScreen.x);
+    originScreen.copy(originWorld).project(camera);
+    arrowScreen.copy(arrowWorld).project(camera);
+
+    const angle = Math.atan2(h * (arrowScreen.y - originScreen.y), w * (arrowScreen.x - originScreen.x) );
     this.arrow.material.rotation = angle - Math.PI / 2;
+
+    this.debug.update(this.dot, arrowWorld, camera, renderer)
+    this.debug.update(this.orgdot, originWorld, camera, renderer)
   }
 }
+
+
 
 
 
@@ -131,24 +208,29 @@ function addStar() {
   const [x, y, z] = Array(3).fill().map(() => THREE.MathUtils.randFloatSpread(100));
 
   star.position.set(x, y, z);
-  scene.add(star)
+  root.add(star)
 }
 
 Array(200).fill().forEach(addStar)
 
 
-
+const axesHelper = new THREE.AxesHelper()
 const test = new vectorObject(20, 20, 20)
 
-scene.add(torus)
-scene.add(gridHelper)
+root.add(torus)
+root.add(gridHelper)
+root.add(axesHelper)
 
-
+const linearMatrix = new THREE.Matrix4();
+linearMatrix.setFromMatrix3(matrix)
+console.log(linearMatrix)
+root.matrixAutoUpdate = false;
+root.matrix.copy(linearMatrix);
 
 
 function animate() {
   requestAnimationFrame(animate);
-
+  root.updateMatrixWorld(true)
   torus.rotation.x += 0.01;
   torus.rotation.y += 0.005;
   torus.rotation.z += 0.01;
@@ -157,9 +239,10 @@ function animate() {
 
   renderer.render(scene,camera);
 
-  test.pos.x += 0.01;
-  test.pos.y += 0.01;
-  test.pos.z += 0.01;
+  test.pre.x += 0.01;
+  test.pre.y += 0.01;
+  test.pre.z += 0.01;
+
 
   for (const vector of vectors) {
     vector.update()
@@ -168,6 +251,9 @@ function animate() {
 }
 
 animate()
+
+
+
 
 
 function addBasis() {
