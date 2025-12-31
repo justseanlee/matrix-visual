@@ -1,12 +1,15 @@
 import './style.css'
 
 import * as THREE from 'three'
-import { sqrtm } from 'mathjs'
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+
+import { create, all } from 'mathjs';
+
+const math = create(all);
 
 // Setup
 const scene = new THREE.Scene();
@@ -29,22 +32,32 @@ const origin = new THREE.Vector3(0, 0, 0);
 
 renderer.render(scene, camera);
 
-const gridHelper = new THREE.GridHelper(200, 50)
+const gridHelper = new THREE.GridHelper(100, 5)
+const fixedGrid = new THREE.GridHelper(400, 10, new THREE.Color(0xcccccc))
+
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
-const matrix = new THREE.Matrix3().set(
+let matrix = new THREE.Matrix4().set(
   THREE.MathUtils.randFloatSpread(2),
   THREE.MathUtils.randFloatSpread(2),
   THREE.MathUtils.randFloatSpread(2),
+  0,
 
   THREE.MathUtils.randFloatSpread(2),
   THREE.MathUtils.randFloatSpread(2),
   THREE.MathUtils.randFloatSpread(2),
+  0,
 
   THREE.MathUtils.randFloatSpread(2),
   THREE.MathUtils.randFloatSpread(2),
-  THREE.MathUtils.randFloatSpread(2)
+  THREE.MathUtils.randFloatSpread(2),
+  0,
+
+  0,
+  0,
+  0,
+  1
 );
 
 
@@ -52,6 +65,8 @@ const vectors = [];
 
 const root = new THREE.Group();
 scene.add(root);
+
+const duration = 10.0;
 
 
 class ScreenDebugPoints {
@@ -150,7 +165,12 @@ class vectorObject {
     const w = renderer.domElement.clientWidth;
     const h = renderer.domElement.clientHeight;
 
-    this.pos = this.pre.clone().applyMatrix3(matrix)
+    if(!this.col1.equals(new THREE.Color(0xffffff))) {
+      this.pos = this.pre.clone().applyMatrix4(matrix)
+    } else {
+      this.pos = this.pre
+    }
+    
 
     this.line.geometry.setPositions([0, 0, 0, this.pos.x, this.pos.y, this.pos.z])
     this.arrow.position.set(this.pos.x, this.pos.y, this.pos.z)
@@ -175,8 +195,8 @@ class vectorObject {
     const angle = Math.atan2(h * (arrowScreen.y - originScreen.y), w * (arrowScreen.x - originScreen.x) );
     this.arrow.material.rotation = angle - Math.PI / 2;
 
-    this.debug.update(this.dot, arrowWorld, camera, renderer)
-    this.debug.update(this.orgdot, originWorld, camera, renderer)
+    //this.debug.update(this.dot, arrowWorld, camera, renderer)
+    //this.debug.update(this.orgdot, originWorld, camera, renderer)
   }
 }
 
@@ -216,25 +236,78 @@ Array(200).fill().forEach(addStar)
 
 
 const axesHelper = new THREE.AxesHelper()
-const test = new vectorObject(20, 20, 20)
+createBasis(matrix, new THREE.Color(0xffffff))
+
+const test = new vectorObject(20, 20, 20, new THREE.Color(0xefffff))
+
+
+
+
+const square_geometry = new THREE.PlaneGeometry(2, 2);
+const edges = new THREE.EdgesGeometry(square_geometry, 90);
+const square_material = new THREE.LineBasicMaterial({color: 0xffffff});
+
+const square = new THREE.LineSegments(edges, square_material);
+const other_square = new THREE.LineSegments();
+other_square.copy(square)
+other_square.rotation.x = math.pi/2;
+
+
+const box_geometry = new THREE.BoxGeometry(100, 100, 100);
+const box_edges = new THREE.EdgesGeometry(box_geometry, 90);
+const box_material = new THREE.LineBasicMaterial({color: 0xffffff});
+
+const box = new THREE.LineSegments(box_edges, box_material);
+
+
+root.add(square)
+root.add(other_square)
+root.add(box)
+
+
 
 root.add(torus)
 root.add(gridHelper)
-root.add(axesHelper)
 
-const linearMatrix = new THREE.Matrix4();
-linearMatrix.setFromMatrix3(matrix)
-console.log(linearMatrix)
+scene.add(fixedGrid)
+scene.add(axesHelper)
+
+console.log(matrix)
+printThreeMat4(matrix)
 root.matrixAutoUpdate = false;
-root.matrix.copy(linearMatrix);
+root.matrix.copy(matrix);
 
+
+
+console.log(matrix);
+
+
+
+const clock = new THREE.Clock();
+let elapsed = 0;
+
+const atlast = new MatrixAnimation(matrix)
 
 function animate() {
   requestAnimationFrame(animate);
   root.updateMatrixWorld(true)
+
+  elapsed += clock.getDelta();
+  let t = elapsed / duration;
+  t = Math.min(t, 1);
+
+  atlast.update(t)
+
+
+  if (t == 1) {
+    elapsed = 0;
+  }
+  root.matrix.copy(matrix);
+
   torus.rotation.x += 0.01;
   torus.rotation.y += 0.005;
   torus.rotation.z += 0.01;
+
 
   controls.update();
 
@@ -257,21 +330,17 @@ animate()
 
 
 
-function addBasis() {
-  const basis = {
-    x: new THREE.Vector3(),
-    y: new THREE.Vector3(),
-    z: new THREE.Vector3()
-  }
-  matrix.extractBasis(basis.x, basis.y, basis.z);
+function createBasis(mat, col) {
+  const m = mat instanceof THREE.Matrix4 ? threeToMath(mat) : mat
+  
 
-  const c = 0;
-  for (const b in basis) {
-    const geometry = new LineGeometry();
-    geometry.setPositions([new THREE.Vector3, b])
-    geometry.setColors([])
-    c++;
-  }
+  const v1 = math.column(m, 0);
+  const v2 = math.column(m, 1);
+  const v3 = math.column(m, 2);
+
+  const e1 = new vectorObject(v1[0], v1[1], v1[2], new THREE.Color(0xffffff), new THREE.Color(0xff0000))
+  const e2 = new vectorObject(v2[0], v2[1], v2[2], new THREE.Color(0xffffff), new THREE.Color(0x00ff00))
+  const e3 = new vectorObject(v3[0], v3[1], v3[2], new THREE.Color(0xffffff), new THREE.Color(0x0000ff))
 }
 
 
@@ -332,6 +401,172 @@ function addVector(v, color = new THREE.Color(0xffffff)) {
 }
 
 
+function MatrixAnimation(target) {
+  this.decompose = polarDecompose(target);
+  this.quatf = new THREE.Quaternion();
+  this.quatf.setFromRotationMatrix(this.decompose.R)
+
+  this.eigens = [this.decompose.D.elements[0], this.decompose.D.elements[5], this.decompose.D.elements[10]]
+  console.log(this.eigens)
+
+  this.q0 = new THREE.Vector3()
+  this.q1 = new THREE.Vector3()
+  this.q2 = new THREE.Vector3()
+
+  this.decompose.Q.clone().extractBasis(this.q0, this.q1, this.q2);
+  
+
+  this.R_anim = new THREE.Matrix4();
+  this.D_anim = new THREE.Matrix4();
+  this.S_anim = new THREE.Matrix4();
+  this.update = function (t) {
+    const rotation = new THREE.Quaternion();
+    rotation.slerp(this.quatf, t);
+
+    this.D_anim.set(  THREE.MathUtils.lerp(1, this.eigens[0], t), 0, 0, 0,
+                      0, THREE.MathUtils.lerp(1, this.eigens[1], t), 0, 0,
+                      0, 0, THREE.MathUtils.lerp(1, this.eigens[2], t), 0,
+                      0, 0, 0, 1
+                    )
+
+    this.R_anim.makeRotationFromQuaternion(rotation)
+    
+    const S = computeSMatrix(this.q0, this.q1, this.q2, this.eigens, t)
+
+    this.S_anim.multiplyMatrices(this.decompose.F, S)
+
+    matrix.multiplyMatrices(this.R_anim, this.S_anim);
+  }
+}
+
+
+function computeSMatrix(q0, q1, q2, sigmas, t) {
+  const s0 = THREE.MathUtils.lerp(1, sigmas[0], t)
+  const s1 = THREE.MathUtils.lerp(1, sigmas[1], t)
+  const s2 = THREE.MathUtils.lerp(1, sigmas[2], t)
+
+  const m = new THREE.Matrix4()
+  m.set(
+    s0*q0.x*q0.x + s1*q1.x*q1.x + s2*q2.x*q2.x,
+    s0*q0.x*q0.y + s1*q1.x*q1.y + s2*q2.x*q2.y,
+    s0*q0.x*q0.z + s1*q1.x*q1.z + s2*q2.x*q2.z,
+    0,
+
+    s0*q0.y*q0.x + s1*q1.y*q1.x + s2*q2.y*q2.x,
+    s0*q0.y*q0.y + s1*q1.y*q1.y + s2*q2.y*q2.y,
+    s0*q0.y*q0.z + s1*q1.y*q1.z + s2*q2.y*q2.z,
+    0,
+
+    s0*q0.z*q0.x + s1*q1.z*q1.x + s2*q2.z*q2.x,
+    s0*q0.z*q0.y + s1*q1.z*q1.y + s2*q2.z*q2.y,
+    s0*q0.z*q0.z + s1*q1.z*q1.z + s2*q2.z*q2.z,
+    0,
+
+    0, 0, 0, 1
+  )
+
+  return m
+}
+
+
+function polarDecompose(mat4) {
+  const A = threeToMath(mat4)
+
+  const M = math.multiply(math.transpose(A), A)
+  const ans = math.eigs(M)
+  console.log(ans.values)
+  console.log(ans.eigenvectors)
+
+  const Q = math.matrixFromColumns(...ans.eigenvectors.map(obj => obj.vector))
+  const D = math.diag(ans.values.map(value => math.sqrt(value)))
+
+  
+  let S = math.multiply(Q, D, math.transpose(Q))
+
+  let R = math.multiply(A, math.inv(S))
+  console.log(math.multiply(math.transpose(R), R))
+
+  let F = math.diag([1, 1, 1])
+  if (math.det(R) < 0) {
+    F = math.diag([-1, 1, 1])
+
+    R = math.multiply(R, F)  
+    S = math.multiply(F, S)   
+  }
+  const testA = math.multiply(R, S)
+  console.log(F)
+
+  //createBasis(S, new THREE.Color(0xff00ff))
+  //createBasis(R, new THREE.Color(0xffff00))
+  
+  
+  return {
+    R: mathToThree(R),
+    Q: mathToThree(Q),
+    D: mathToThree(D),
+    F: mathToThree(F)
+  }
+  
+}
+
+
+function threeToMath(mat4){
+  const mat3 = new THREE.Matrix3();
+  mat3.setFromMatrix4(mat4);
+  const e = mat3.elements;
+
+  const m = [
+    [e[0], e[3], e[6]],
+    [e[1], e[4], e[7]],
+    [e[2], e[5], e[8]]
+  ]
+
+  return m;
+}
+
+function mathToThree(m) {
+  const mat4 = new THREE.Matrix4();
+  mat4.set( m[0][0], m[0][1], m[0][2], 0,
+            m[1][0], m[1][1], m[1][2], 0,
+            m[2][0], m[2][1], m[2][2], 0,
+            0,       0,       0,       1  )
+
+  return mat4
+}
+
+function printThreeMat4(mat, options) {
+  const e = mat.elements;
+
+  const m = [
+    [ e[0],  e[4],  e[8],  e[12] ],
+    [ e[1],  e[5],  e[9],  e[13] ],
+    [ e[2],  e[6],  e[10], e[14] ],
+    [ e[3],  e[7],  e[11], e[15] ]
+  ];
+
+  printMat4(m, options);
+}
+
+
+function printMat4(m, options = {}) {
+  const {
+    precision = 3,
+    pad = 8
+  } = options;
+
+  if (!Array.isArray(m) || m.length !== 4 || m.some(r => r.length !== 4)) {
+    throw new Error("Expected a 4x4 matrix (array of 4 arrays of length 4)");
+  }
+
+  const format = (x) =>
+    x.toFixed(precision).padStart(pad, " ");
+
+  const lines = m.map(row =>
+    row.map(format).join(" ")
+  );
+
+  console.log(lines.join("\n"));
+}
 
 
 window.addEventListener('resize', () => {
